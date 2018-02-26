@@ -1,0 +1,16 @@
+# URL formats
+
+# gpslogger https://github.com/mendhak/gpslogger format
+# https://example.com/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT&speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
+
+# phonetrack
+# https://example.com/index.php/apps/phonetrack/log/gpslogger/<api key>/<name>?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT
+
+[receivers]
+url1 = https://example.com/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT&speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
+password1 = 123
+
+url2 = https://example.com/index.php/apps/phonetrack/log/gpslogger/<api key>/<name>?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT
+#password2 = 123
+
+
