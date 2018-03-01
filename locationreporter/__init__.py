@@ -84,7 +84,7 @@ def get_gps_location():
         gpsd_socket.close()
 
 
-def get_wifi_location(device="wlan0"):
+def get_wifi_location(device=''):
     import wifindme
     accuracy, latlng = wifindme.locate(device=device, min_aps=2, service='m')
 
@@ -96,7 +96,13 @@ def get_wifi_location(device="wlan0"):
 def report_location(accuracy, latlong):
     from requests import get
 
-    for name, url, password in cfg.receivers:
+    print(cfg.receivers)
+    for name, options in cfg.receivers.items():
+        if cfg.verbose:
+            print("Reporting to %s" % name)
+            print (options)
+
+        #for url, password in cfg.receivers:
         # report to phonetrack
         url = "%slat=%s&lon=%s&acc=%s&timestamp=%s&sat=%s&alt=%s" % (
         phonetrackurl, str(data_stream.TPV['lat']), str(data_stream.TPV['lon']), str(accuracy), str(time.time()), sat, alt)
@@ -119,7 +125,7 @@ def report_location(accuracy, latlong):
         if 200 == response.status_code:
             return True
         else:
-            return False
+                return False
 
 
 if __name__ == '__main__':
@@ -132,7 +138,7 @@ if __name__ == '__main__':
         while True:
             if cfg.gps_available:
                 accuracy, latlong = get_gps_location()
-            accuracy, latlong = get_wifi_location()
+            accuracy, latlong = get_wifi_location(cfg.wifi_device)
             report_location(accuracy, latlong)
 
             sleep(cfg.delay_seconds)
