@@ -6,15 +6,20 @@ Find location from GPS or wifi triangulation, and post to web
 
 import sys
 import time
+import signal
+
+system_version = '0.1'
+system_name = 'locationreporter.py'
+
 cfg = None
 
 
 def read_config():
     global cfg
-    print('Config read from config.py:')
+    # print('Config read from config.py.')
     import config as cfg
     if cfg.verbose:
-        print("Receivers:")
+        print("Configured receivers:")
         for entry in cfg.receivers:
             print("* %s" % entry)
 
@@ -29,7 +34,7 @@ def report_fail(url, timeout=10):
     sys.exit(1)
 
 
-def get_gps_location(timeout=10):
+def get_gps_location():
     gpstries = 2
     acc = 999
 
@@ -42,7 +47,7 @@ def get_gps_location(timeout=10):
         gpsd_socket.watch()
 
         while True:
-            gpserrorcount = 0
+            gpserrorcount = 1
             for new_data in gpsd_socket:
                 if new_data:
                     data_stream.unpack(new_data)
@@ -53,7 +58,7 @@ def get_gps_location(timeout=10):
                         if gpstries < gpserrorcount:  # Die if no GPS
                             if cfg.verbose:
                                 print('No valid gps data!')
-                            return False, (False, False)
+                            return None, (None, None), None, None, None, None
                     else:
                         break
 
@@ -69,27 +74,13 @@ def get_gps_location(timeout=10):
             if cfg.verbose:
                 print(acc, data_stream.TPV['lat'], data_stream.TPV['lon'])  # e.g. 25, (50.1234567, -1.234567)
 
-            #  '{"_type":"location"'
-            #   + ',"tid":"' + id
-            #   + '","acc":' + str(accuracy)
-            #   + ',"lat":' + str(data_stream.TPV['lat'])
-            #   + ',"lon":' + str(data_stream.TPV['lon'])
-            #   + ',"tst":' + str(timestamp)
-            #   + ',"conn":"m"'
-            #   + ',"vel": ' + str(vel)
-            #   + ',"cog": ' + str(cog)
-            #   + altformated
-
-            if not acc:
-                report_fail()
-                sys.exit(1)
     except KeyboardInterrupt:
         gpsd_socket.close()
 
     return acc, latlong, timestamp, alt, vel, cog
 
 
-def get_wifi_location(device='', timeout=15):
+def get_wifi_location(device=''):
     import wifindme
     acc, latlng = wifindme.locate(device=device, min_aps=2, service='m')
     timestamp = time.mktime(time.localtime())
@@ -99,36 +90,43 @@ def get_wifi_location(device='', timeout=15):
     return acc, latlng, timestamp, None, None, None
 
 
-def report_location(timeout=15, accuracy=None, latlong=(None, None), timestamp=None, alt=None, vel=None, cog=None, sat=None, bat=None):
+def report_location(accuracy=None, latlong=(None, None), timestamp=None, alt=None, vel=None, cog=None, sat=None, bat=None):
     from requests import get
     import string
 
     for service in cfg.receivers:
         if cfg.verbose:
             print("Reporting to %s" % service['name'])
-            print("url %s..., user %s" % (service['url'][:20], service['username']))
+
+            url = ''
 
             # Merge data in URL
-            # Phonetrack:
-            # "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT",
+            if 'phonetrack' == service['name']:
+                #  "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT",
 
-            url = string.replace(service['url'], '%LAT', str(latlong[0]))
-            url = string.replace(url, '%LON', str(latlong[1]))
-            url = string.replace(url, '%ACC', str(accuracy))
-            url = string.replace(url, '%TIMESTAMP', str(timestamp))
-            url = string.replace(url, '%ACC', str(accuracy))
-            url = string.replace(url, '%PASSWORD', service['password'])
-            url = string.replace(url, '%USERNAME', service['username'])
-            if alt:
-                url = string.replace(url, '%ALT', alt)
-            if bat:
-                url = string.replace(url, '%BAT', bat)
-            if sat:
-                url = string.replace(url, '%SAT', sat)
+                url = string.replace(service['url'], '%LAT', str(latlong[0]))
+                url = string.replace(url, '%LON', str(latlong[1]))
+                url = string.replace(url, '%ACC', str(accuracy))
+                url = string.replace(url, '%TIMESTAMP', str(timestamp))
+                url = string.replace(url, '%ACC', str(accuracy))
+                url = string.replace(url, '%PASSWORD', service['password'])
+                if 0 == len(service['username']):
+                    url = string.replace(url, '%USERNAME', hostname)
+                else:
+                    url = string.replace(url, '%USERNAME', service['username'])
+                if alt:
+                    url = string.replace(url, '%ALT', alt)
+                if bat:
+                    url = string.replace(url, '%BAT', bat)
+                if sat:
+                    url = string.replace(url, '%SAT', sat)
+            else:
+                print("Unknown reporting service %s. Supported are: 'phonetrack'." % service['name'])
+                sys.exit(1)
 
             if cfg.verbose:
                 print(url)
-            response = get(url)
+            response = get(url, timeout=cfg.timeout_report)
             if cfg.verbose:
                 print(response)
 
@@ -145,14 +143,38 @@ def check_user():
         print("You usually need root privileges for wifi triangulation, please use 'sudo'.")
 
 
+class Timeout:
+    """Timeout class using ALARM signal."""
+
+    class Timeout(Exception):
+        pass
+
+    def __init__ (self, sec):
+        self.sec = sec
+
+    def __enter__ (self):
+        signal.signal(signal.SIGALRM, self.raise_timeout)
+        signal.alarm(self.sec)
+
+    def __exit__ (self, *args):
+        signal.alarm(0)  # disable alarm
+
+    def raise_timeout (self, *args):
+        raise Timeout.Timeout()
+
+
 if __name__ == '__main__':
     timestamp = None
     alt = None
     vel = None
     cog = None
+    accuracy = None
+    latlong = (None, None)
 
     from socket import gethostname
     hostname = gethostname()
+
+    print("%s v. %s on %s" % (system_name, system_version, hostname))
     read_config()
     check_user()
 
@@ -160,26 +182,44 @@ if __name__ == '__main__':
         print("GPS _and_ wifi is disabled in config...")
         sys.exit(1)
 
-    try:
-        # Get a quick wifi location first
-        if cfg.use_wifi:
-            accuracy, latlong, timestamp, alt, vel, cog = get_wifi_location(cfg.wifi_device, cfg.timeout_location)
-        if accuracy:
-            report_location(cfg.timeout_post, accuracy, latlong, timestamp, alt, vel, cog)
+    # Get a quick wifi location first
+    if cfg.use_wifi:
+        try:
+            with Timeout(cfg.timeout_location):
+                accuracy, latlong, timestamp, alt, vel, cog = get_wifi_location(cfg.wifi_device)
+        except Timeout.Timeout:
+            print("Operation timed out due to user set limit.")
+        except Exception, message:
+            print('General error %s, ignoring.' % message)
+
+    if accuracy:
+        report_location(accuracy, latlong, timestamp, alt, vel, cog)
 
         while True:
-            accuracy = False
+            try:
+                accuracy = False
 
-            if cfg.use_gps:
-                accuracy, latlong, timestamp, alt, vel, cog = get_gps_location(cfg.timeout_location)
+                if cfg.use_gps:
+                    try:
+                        with Timeout(cfg.timeout_location):
+                            accuracy, latlong, timestamp, alt, vel, cog = get_gps_location()
+                    except Timeout.Timeout:
+                        print("Operation timed out due to user set limit.")
 
-            if not accuracy and cfg.use_wifi:
-                accuracy, latlong, timestamp, alt, vel, cog = get_wifi_location(cfg.wifi_device, cfg.timeout_location)
+                if not accuracy and cfg.use_wifi:
+                    try:
+                        with Timeout(cfg.timeout_location):
+                            accuracy, latlong, timestamp, alt, vel, cog = get_wifi_location(cfg.wifi_device)
+                    except Timeout.Timeout:
+                        print("Operation timed out due to user set limit.")
 
-            if accuracy:
-                report_location(cfg.timeout_post, accuracy, latlong, timestamp, alt, vel, cog)
+                if accuracy:
+                    report_location(accuracy, latlong, timestamp, alt, vel, cog)
 
-            time.sleep(cfg.delay_seconds)
+                time.sleep(cfg.delay_seconds)
 
-    except KeyboardInterrupt:
-        print('\nTerminated by user\n')
+            except KeyboardInterrupt:
+                print('\nTerminated by user\n')
+                sys.exit(0)
+            # except Exception, message:
+            #     print('General error %s, ignoring.' % message)
