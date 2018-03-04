@@ -8,22 +8,28 @@ Find location from GPS or wifi triangulation, and post to web. Originally made t
 * Preferably wifi
 * Preferably a USB GPS dongle
 
+# Software dependencies
+
+* gpsd set up and working. Option "-n" recommended.
+* The rest should be covered by requirements.txt
 
 ## Code structure
 
 * Read config.
 * Attempt Wifi first, because it's fast.
-* Attempt GPS (unless disabled).
-* Attempt Wifi, if GPS failed.
-* Post to each service configured. Buffer if post fails?
-* Return to step 3.
-
+* Loop:
+  * Attempt GPS.
+  * Attempt Wifi, if GPS failed.
+  * Post to each service configured.
+  * Wait configured time
 
 ## TODO
 
 * Allow multiple report receivers
 * Streamline
 * Deploy to PIP
+* Buffer failed reports?
+* Report fail
 
 
 ## Example run
@@ -49,6 +55,6 @@ https://users.no/index.php/apps/phonetrack/log/gpslogger/12345cb3143c49c5a5944dd
 
 Scratch notes:
 
-https://martin-thoma.com/configuration-files-in-python/
-https://github.com/wadda/gps3/ http://www.catb.org/gpsd/gpsd_json.html
-https://pythonadventures.wordpress.com/2012/12/08/raise-a-timeout-exception-after-x-seconds/
+* https://martin-thoma.com/configuration-files-in-python/
+* https://github.com/wadda/gps3/ http://www.catb.org/gpsd/gpsd_json.html
+* https://pythonadventures.wordpress.com/2012/12/08/raise-a-timeout-exception-after-x-seconds/
