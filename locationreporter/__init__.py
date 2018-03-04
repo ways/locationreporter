@@ -5,7 +5,7 @@ Find location from GPS or wifi triangulation, and post to web
 """
 
 import sys
-from time import sleep
+import time
 cfg = None
 
 
@@ -19,11 +19,11 @@ def read_config():
             print("* %s" % entry)
 
 
-def report_fail(timeout=10):
+def report_fail(url, timeout=10):
     from requests import get
     if cfg.verbose:
         print("No location")
-    response = get(fail_url)
+    response = get(url)
     if cfg.verbose:
         print(response)
     sys.exit(1)
@@ -86,52 +86,57 @@ def get_gps_location(timeout=10):
     except KeyboardInterrupt:
         gpsd_socket.close()
 
-    return acc, latlong
+    return acc, latlong, timestamp, alt, vel, cog
 
 
 def get_wifi_location(device='', timeout=15):
     import wifindme
     acc, latlng = wifindme.locate(device=device, min_aps=2, service='m')
+    timestamp = time.mktime(time.localtime())
 
     if cfg.verbose:
         print('Wifi location: %s, %s.' % (acc, latlng))
-    return acc, latlng
+    return acc, latlng, timestamp, None, None, None
 
 
-def report_location(accuracy, latlong, timeout=15):
+def report_location(timeout=15, accuracy=None, latlong=(None, None), timestamp=None, alt=None, vel=None, cog=None, sat=None, bat=None):
     from requests import get
+    import string
 
-    for service in cfg.receivers().items():
+    for service in cfg.receivers:
         if cfg.verbose:
-            print("Reporting to %s" % service)
+            print("Reporting to %s" % service['name'])
+            print("url %s..., user %s" % (service['url'][:20], service['username']))
 
-        for url, user, password, failurl in service:
+            # Merge data in URL
+            # Phonetrack:
+            # "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT",
+
+            url = string.replace(service['url'], '%LAT', str(latlong[0]))
+            url = string.replace(url, '%LON', str(latlong[1]))
+            url = string.replace(url, '%ACC', str(accuracy))
+            url = string.replace(url, '%TIMESTAMP', str(timestamp))
+            url = string.replace(url, '%ACC', str(accuracy))
+            url = string.replace(url, '%PASSWORD', service['password'])
+            url = string.replace(url, '%USERNAME', service['username'])
+            if alt:
+                url = string.replace(url, '%ALT', alt)
+            if bat:
+                url = string.replace(url, '%BAT', bat)
+            if sat:
+                url = string.replace(url, '%SAT', sat)
+
             if cfg.verbose:
-                print("url %s, user %s, failurl %s" % (url[:10], user, failurl))
+                print(url)
+            response = get(url)
+            if cfg.verbose:
+                print(response)
 
-        # # report to phonetrack
-        # url = "%slat=%s&lon=%s&acc=%s&timestamp=%s&sat=%s&alt=%s" % (
-        # phonetrackurl, str(data_stream.TPV['lat']), str(data_stream.TPV['lon']), str(accuracy), str(time.time()), sat, alt)
-        #
-        # if verbose: print(url)
-        # response = get(url)
-        # if verbose: print(response)
-        #
-        # # report to gpslogger
-        # url = "%slatitude=%s&longitude=%s&device=%s&accuracy=%s&provider=gps" % (
-        # gpsloggerurl, str(data_stream.TPV['lat']), str(data_stream.TPV['lon']), hostname, str(accuracy))
-        # if apipassword:
-        #     url = url + "&api_password=" + apipassword
-        #
-        # if verbose: print(url)
-        # response = get(url)
-        # if verbose: print(response)
-        #
-        # # Exit will be based on last response (gpslogger)
-        # if 200 == response.status_code:
-        #     return True
-        # else:
-        #         return False
+            # Exit based on response
+            if 200 == response.status_code:
+                return True
+            else:
+                return False
 
 
 def check_user():
@@ -141,25 +146,40 @@ def check_user():
 
 
 if __name__ == '__main__':
+    timestamp = None
+    alt = None
+    vel = None
+    cog = None
+
     from socket import gethostname
     hostname = gethostname()
     read_config()
     check_user()
 
+    if not cfg.use_wifi and not cfg.use_gps:
+        print("GPS _and_ wifi is disabled in config...")
+        sys.exit(1)
+
     try:
+        # Get a quick wifi location first
+        if cfg.use_wifi:
+            accuracy, latlong, timestamp, alt, vel, cog = get_wifi_location(cfg.wifi_device, cfg.timeout_location)
+        if accuracy:
+            report_location(cfg.timeout_post, accuracy, latlong, timestamp, alt, vel, cog)
+
         while True:
             accuracy = False
 
-            if cfg.gps_available:
-                accuracy, latlong = get_gps_location(cfg.timeout_location)
+            if cfg.use_gps:
+                accuracy, latlong, timestamp, alt, vel, cog = get_gps_location(cfg.timeout_location)
 
-            if not accuracy:
-                accuracy, latlong = get_wifi_location(cfg.wifi_device, cfg.timeout_location)
+            if not accuracy and cfg.use_wifi:
+                accuracy, latlong, timestamp, alt, vel, cog = get_wifi_location(cfg.wifi_device, cfg.timeout_location)
 
             if accuracy:
-                report_location(accuracy, latlong, cfg.timeout_post)
+                report_location(cfg.timeout_post, accuracy, latlong, timestamp, alt, vel, cog)
 
-            sleep(cfg.delay_seconds)
+            time.sleep(cfg.delay_seconds)
 
     except KeyboardInterrupt:
         print('\nTerminated by user\n')
