@@ -36,8 +36,14 @@ def report_fail(url, timeout=10):
 
 
 def get_gps_location():
-    gpstries = 2
-    acc = 999
+    from socket import error as socketerror
+
+    gpsd_tries_max = 10
+    acc = None
+    tst = None
+    alt = None
+    cog = None
+    vel = None
 
     from gps3 import gps3
     gpsd_socket = gps3.GPSDSocket()
@@ -48,33 +54,41 @@ def get_gps_location():
         gpsd_socket.watch()
 
         while True:
-            gpserrorcount = 1
+            gpsd_tries = 1
             for new_data in gpsd_socket:
                 if new_data:
                     data_stream.unpack(new_data)
                     if cfg.verbose:
-                        print('Reading gps data (%s/%s)' % (gpserrorcount, gpstries))
-                    if 'n/a' == data_stream.TPV['lat']:
-                        gpserrorcount += 1
-                        if gpstries < gpserrorcount:  # Die if no GPS
+                        print("Connected to gpsd version %s.%s" % (data_stream.VERSION['proto_major'], data_stream.VERSION['proto_minor']))
+                        print('Reading gps data (%s/%s), epx %s' % (gpsd_tries, gpsd_tries_max, data_stream.TPV['epx']))
+                    if 'n/a' == data_stream.DEVICE['path']:
+                        print("No GPS connected")
+                        return acc, latlong, tst, alt, vel, cog
+
+                    if 'n/a' == data_stream.TPV['lat']:  # No data
+                        gpsd_tries += 1
+                        if gpsd_tries_max <= gpsd_tries:
                             if cfg.verbose:
                                 print('No valid gps data!')
-                            return None, (None, None), None, None, None, None
+                            return acc, latlong, tst, alt, vel, cog
                     else:
+                        tst = time.mktime(time.strptime(data_stream.TPV['time'], '%Y-%m-%dT%H:%M:%S.000Z'))
+                        if 'n/a' != data_stream.TPV['epx']:
+                            acc = str((int(data_stream.TPV['epx'] + data_stream.TPV['epy'])) / 2)
+
+                        alt = data_stream.TPV['alt']
+                        cog = data_stream.TPV['track']
+                        vel = data_stream.TPV['speed']
+                        #  sat = data_stream.TPV['satellites']
+
+                        if cfg.verbose:
+                            print(
+                            acc, data_stream.TPV['lat'], data_stream.TPV['lon'])  # e.g. 25, (50.1234567, -1.234567)
                         break
+                time.sleep(1)
 
-            tst = time.mktime(time.strptime(data_stream.TPV['time'], '%Y-%m-%dT%H:%M:%S.000Z'))
-            if 'n/a' != data_stream.TPV['epx']:
-                acc = str((int(data_stream.TPV['epx'] + data_stream.TPV['epy'])) / 2)
-
-            alt = data_stream.TPV['alt']
-            cog = data_stream.TPV['track']
-            vel = data_stream.TPV['speed']
-            sat = data_stream.TPV['satellites']
-
-            if cfg.verbose:
-                print(acc, data_stream.TPV['lat'], data_stream.TPV['lon'])  # e.g. 25, (50.1234567, -1.234567)
-
+    except socketerror, err:
+        print("Error: Unable to connect to gpsd. Is it installed and enabled? (%s)" % err)
     except KeyboardInterrupt:
         gpsd_socket.close()
 
@@ -177,11 +191,12 @@ if __name__ == '__main__':
 
     print("%s v. %s on %s" % (system_name, system_version, hostname))
     read_config()
-    check_user()
 
     if not cfg.use_wifi and not cfg.use_gps:
         print("GPS _and_ wifi is disabled in config...")
         sys.exit(1)
+    elif cfg.use_wifi:
+        check_user()
 
     # Get a quick wifi location first
     if cfg.use_wifi:
@@ -196,31 +211,33 @@ if __name__ == '__main__':
     if accuracy:
         report_location(accuracy, latlong, timestamp, altitude, velocity, course)
 
-        while True:
-            try:
-                accuracy = False
+    while True:
+        try:
+            accuracy = False
 
-                if cfg.use_gps:
-                    try:
-                        with Timeout(cfg.timeout_location):
-                            accuracy, latlong, timestamp, altitude, velocity, course = get_gps_location()
-                    except Timeout.Timeout:
-                        print("Operation timed out due to user set limit.")
+            if cfg.use_gps:
+                try:
+                    with Timeout(cfg.timeout_location):
+                        accuracy, latlong, timestamp, altitude, velocity, course = get_gps_location()
+                except Timeout.Timeout:
+                    print("Operation get_gps_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
-                if not accuracy and cfg.use_wifi:
-                    try:
-                        with Timeout(cfg.timeout_location):
-                            accuracy, latlong, timestamp, altitude, velocity, course = get_wifi_location(cfg.wifi_device)
-                    except Timeout.Timeout:
-                        print("Operation timed out due to user set limit.")
+            if not accuracy and cfg.use_wifi:
+                try:
+                    with Timeout(cfg.timeout_location):
+                        accuracy, latlong, timestamp, altitude, velocity, course = get_wifi_location(cfg.wifi_device)
+                except Timeout.Timeout:
+                    print("Operation get_wifi_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
-                if accuracy:
-                    report_location(accuracy, latlong, timestamp, altitude, velocity, course)
+            if accuracy:
+                report_location(accuracy, latlong, timestamp, altitude, velocity, course)
 
-                time.sleep(cfg.delay_seconds)
+            if cfg.verbose:
+                print("Next run in %s seconds..." % cfg.delay_seconds)
+            time.sleep(cfg.delay_seconds)
 
-            except KeyboardInterrupt:
-                print('\nTerminated by user\n')
-                sys.exit(0)
-            except Exception, message:  # Keep going, no matter what
-                print('General error %s, ignoring.' % message)
+        except KeyboardInterrupt:
+            print('\nTerminated by user\n')
+            sys.exit(0)
+#        except Exception, message:  # Keep going, no matter what
+#            print('General error %s, ignoring.' % message)
