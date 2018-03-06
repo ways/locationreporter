@@ -31,11 +31,9 @@ Supports logging to the following via GET:
 
 ## TODO
 
-* Allow multiple report receivers
 * Deploy to PIP
 * Buffer failed reports?
 * Report fail
-
 
 ## Example run
 
