@@ -21,7 +21,7 @@ def read_config():
     if cfg.verbose:
         print("Configured receivers:")
         for entry in cfg.receivers:
-            print("* %s" % entry)
+            print("* %s" % entry['name'])
 
 
 # TODO:
@@ -62,7 +62,7 @@ def get_gps_location():
                         print("Connected to gpsd version %s.%s" % (data_stream.VERSION['proto_major'], data_stream.VERSION['proto_minor']))
                         print('Reading gps data (%s/%s), epx %s' % (gpsd_tries, gpsd_tries_max, data_stream.TPV['epx']))
                     if 'n/a' == data_stream.DEVICE['path']:
-                        print("No GPS connected")
+                        print("Error: No GPS connected (please disable gps in config if this is on purpose).")
                         return acc, latlong, tst, alt, vel, cog
 
                     if 'n/a' == data_stream.TPV['lat']:  # No data
@@ -105,13 +105,13 @@ def get_wifi_location(device=''):
     return acc, latlng, tst, None, None, None
 
 
-def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, cog=None, sat=None, bat=None):
+def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, cog=None, sat=None, bat=None, prov=None):
     from requests import get
     import string
 
     for service in cfg.receivers:
         if cfg.verbose:
-            print("Reporting to %s" % service['name'])
+            print("-> Reporting to %s: " % service['name'])
 
             url = ''
 
@@ -121,7 +121,7 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
 
                 url = string.replace(service['url'], '%LAT', str(pos[0]))
                 url = string.replace(url, '%LON', str(pos[1]))
-                url = string.replace(url, '%ACC', str(acc))
+                url = string.replace(url, '%ACC', str(round(acc, 0)))
                 url = string.replace(url, '%TIMESTAMP', str(tst))
                 url = string.replace(url, '%ACC', str(acc))
                 url = string.replace(url, '%PASSWORD', service['password'])
@@ -135,21 +135,49 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                     url = string.replace(url, '%BAT', bat)
                 if sat:
                     url = string.replace(url, '%SAT', sat)
+
+            elif 'gpslogger' == service['name']:
+                # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT
+                #   &speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
+                # Never setting activity
+                url = string.replace(service['url'], '%LAT', str(pos[0]))
+                url = string.replace(url, '%LON', str(pos[1]))
+                url = string.replace(url, '%ACC', str(round(acc, 0)))
+                url = string.replace(url, '%PROV', prov)
+                if 0 == len(service['username']):
+                    url = string.replace(url, '%SER', hostname)
+                else:
+                    url = string.replace(url, '%USERNAME', service['username'])
+                if alt:
+                    url = string.replace(url, '%ALT', alt)
+                else:
+                    url = string.replace(url, '&altitude=%ALT', '')
+                if bat:
+                    url = string.replace(url, '%BAT', bat)
+                else:
+                    url = string.replace(url, '&battery=%BATT', '')
+                if sat:
+                    url = string.replace(url, '%SAT', sat)
+                if vel:
+                    url = string.replace(url, '%SPD', vel)
+                else:
+                    url = string.replace(url, '&speed=%SPD', '')
+                if cog:
+                    url = string.replace(url, '%DIR', cog)
+                else:
+                    url = string.replace(url, '&direction=%DIR', '')
+                if 0 < len(service['password']):
+                    url = url + "&api_password=" + service['password']
+
             else:
-                print("Unknown reporting service %s. Supported are: 'phonetrack'." % service['name'])
+                print("Unknown reporting service %s. Supported are: phonetrack and gpslogger." % service['name'])
                 sys.exit(1)
 
             if cfg.verbose:
-                print(url)
+                print(" %s" % url)
             response = get(url, timeout=cfg.timeout_report)
             if cfg.verbose:
                 print(response)
-
-            # Exit based on response
-            if 200 == response.status_code:
-                return True
-            else:
-                return False
 
 
 def check_user():
@@ -185,6 +213,7 @@ if __name__ == '__main__':
     course = None
     accuracy = None
     latlong = (None, None)
+    provider = 'wifi'
 
     from socket import gethostname
     hostname = gethostname()
@@ -209,7 +238,7 @@ if __name__ == '__main__':
             print('General error %s, ignoring.' % message)
 
     if accuracy:
-        report_location(accuracy, latlong, timestamp, altitude, velocity, course)
+        report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider)
 
     while True:
         try:
@@ -219,6 +248,7 @@ if __name__ == '__main__':
                 try:
                     with Timeout(cfg.timeout_location):
                         accuracy, latlong, timestamp, altitude, velocity, course = get_gps_location()
+                        provider = 'gps'
                 except Timeout.Timeout:
                     print("Operation get_gps_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
@@ -226,11 +256,12 @@ if __name__ == '__main__':
                 try:
                     with Timeout(cfg.timeout_location):
                         accuracy, latlong, timestamp, altitude, velocity, course = get_wifi_location(cfg.wifi_device)
+                        provider = 'wifi'
                 except Timeout.Timeout:
                     print("Operation get_wifi_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
             if accuracy:
-                report_location(accuracy, latlong, timestamp, altitude, velocity, course)
+                report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider)
 
             if cfg.verbose:
                 print("Next run in %s seconds..." % cfg.delay_seconds)

@@ -13,6 +13,12 @@ Find location from GPS or wifi triangulation, and post to web. Originally made t
 * gpsd set up and working. Option "-n" recommended.
 * The rest should be covered by requirements.txt
 
+# Servers
+
+Supports logging to the following via GET:
+* gpslogger https://home-assistant.io/components/device_tracker.gpslogger/
+* PhoneTrack https://gitlab.com/eneiluj/phonetrack-oc/wikis/home
+
 ## Code structure
 
 * Read config.
@@ -26,7 +32,6 @@ Find location from GPS or wifi triangulation, and post to web. Originally made t
 ## TODO
 
 * Allow multiple report receivers
-* Streamline
 * Deploy to PIP
 * Buffer failed reports?
 * Report fail
@@ -56,5 +61,6 @@ https://users.no/index.php/apps/phonetrack/log/gpslogger/12345cb3143c49c5a5944dd
 Scratch notes:
 
 * https://martin-thoma.com/configuration-files-in-python/
-* https://github.com/wadda/gps3/ http://www.catb.org/gpsd/gpsd_json.html
+* https://github.com/wadda/gps3/
+* http://www.catb.org/gpsd/gpsd_json.html
 * https://pythonadventures.wordpress.com/2012/12/08/raise-a-timeout-exception-after-x-seconds/
