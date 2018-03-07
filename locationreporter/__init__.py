@@ -9,7 +9,7 @@ import time
 import signal
 
 __projectname__ = 'locationreporter'
-__version__ = '0.1'
+__version__ = '0.2'
 __author__ = 'Lars Falk-Petersen'
 __copyright__ = 'Copyright 2018'
 __license__ = 'GPL'
