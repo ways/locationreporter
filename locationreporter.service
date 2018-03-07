@@ -1,0 +1,12 @@
+[Unit]
+Description=locationreporter
+After=multi-user.target
+
+[Service]
+User=root
+ExecStart=/usr/bin/locationreporter.py
+RestartSec=10s
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
