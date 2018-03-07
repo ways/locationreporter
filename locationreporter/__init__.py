@@ -8,15 +8,19 @@ import sys
 import time
 import signal
 
-system_version = '0.1'
-system_name = 'locationreporter.py'
+__projectname__ = 'locationreporter'
+__version__ = '0.1'
+__author__ = 'Lars Falk-Petersen'
+__copyright__ = 'Copyright 2018'
+__license__ = 'GPL'
+__url__ = 'https://github.com/ways/locationreporter'
 
 cfg = None
 
 
 def read_config():
+    """ Read config from config.py and put in cfg """
     global cfg
-    # print('Config read from config.py.')
     import config as cfg
     if cfg.verbose:
         print("Configured receivers:")
@@ -36,6 +40,11 @@ def report_fail(url, timeout=10):
 
 
 def get_gps_location():
+    """ Attempt to get a location from gpsd. Return all as None on fail.
+
+        :returns: accuracy, latlong, timestamp, altitude, velocity, course, satelittes
+        :rtype: float, list, float, float, float, float, float
+    """
     from socket import error as socketerror
 
     gpsd_tries_max = 10
@@ -79,6 +88,8 @@ def get_gps_location():
                     if cfg.verbose:
                         print(acc, data_stream.TPV['lat'], data_stream.TPV['lon'])  # ie. 25, (50.1234567,-1.234567)
                     break
+            else:  # Drop out if no new data
+                break
 
     except socketerror, err:
         print("Error: Unable to connect to gpsd. Is it installed and enabled? (%s)" % err)
@@ -89,13 +100,20 @@ def get_gps_location():
 
 
 def get_wifi_location(device=''):
+    """ Attempt to get a location based on wifi triangulation. Return all as None on fail
+
+        :param device: name of wifi card, i.e. wlan0
+        :type device: string
+        :returns: accuracy, latlong, timestamp
+        :rtype: float, list, float
+    """
     import wifindme
     acc, latlng = wifindme.locate(device=device, min_aps=2, service='m')
     tst = time.mktime(time.localtime())
 
     if cfg.verbose:
         print('Wifi location: %s, %s.' % (acc, latlng))
-    return acc, latlng, tst, None, None, None
+    return round(acc, 0), latlng, tst
 
 
 def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, cog=None, sat=None, bat=None, prov=None):
@@ -212,7 +230,7 @@ if __name__ == '__main__':
     from socket import gethostname
     hostname = gethostname()
 
-    print("%s v. %s on %s" % (system_name, system_version, hostname))
+    print("%s v. %s on %s" % (__projectname__, __version__, hostname))
     read_config()
 
     if not cfg.use_wifi and not cfg.use_gps:
@@ -225,14 +243,13 @@ if __name__ == '__main__':
     if cfg.use_wifi:
         try:
             with Timeout(cfg.timeout_location):
-                accuracy, latlong, timestamp, altitude, velocity, course = get_wifi_location(cfg.wifi_device)
+                accuracy, latlong, timestamp = get_wifi_location(cfg.wifi_device)
         except Timeout.Timeout:
             print("Operation timed out due to user set limit.")
-        except Exception, message:
-            print('General error %s, ignoring.' % message)
 
     if accuracy:
-        report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider)
+        report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course,
+                        prov=provider, sat=satelittes)
 
     while True:
         try:
@@ -249,7 +266,7 @@ if __name__ == '__main__':
             if not accuracy and cfg.use_wifi:
                 try:
                     with Timeout(cfg.timeout_location):
-                        accuracy, latlong, timestamp, altitude, velocity, course = get_wifi_location(cfg.wifi_device)
+                        accuracy, latlong, timestamp = get_wifi_location(cfg.wifi_device)
                         provider = 'wifi'
                 except Timeout.Timeout:
                     print("Operation get_wifi_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
@@ -264,5 +281,3 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             print('\nTerminated by user\n')
             sys.exit(0)
-#        except Exception, message:  # Keep going, no matter what
-#            print('General error %s, ignoring.' % message)

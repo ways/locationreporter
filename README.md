@@ -31,6 +31,7 @@ Supports logging to the following via GET:
 
 ## TODO
 
+* Systemd .service file
 * Add timing info to see what takes long time
 * Deploy to PIP
 * Buffer failed reports?
