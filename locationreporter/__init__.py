@@ -46,6 +46,7 @@ def get_gps_location():
         :rtype: float, list, float, float, float, float, float
     """
     from socket import error as socketerror
+    from datetime import datetime
 
     gpsd_tries = 1
     gpsd_tries_max = 10
@@ -76,7 +77,11 @@ def get_gps_location():
                             print('No valid gps data!')
                         return acc, latlong, tst, alt, vel, cog, sat
                 else:
-                    tst = time.mktime(time.strptime(data_stream.TPV['time'], '%Y-%m-%dT%H:%M:%S.000Z'))
+                    # TODO: optimize?
+                    gpstime = time.mktime(time.strptime(data_stream.TPV['time'], '%Y-%m-%dT%H:%M:%S.000Z'))
+                    offset = datetime.fromtimestamp(gpstime) - datetime.utcfromtimestamp(gpstime)
+                    tst = gpstime + offset.seconds
+
                     if 'n/a' != data_stream.TPV['epx']:
                         acc = (int(data_stream.TPV['epx'] + data_stream.TPV['epy'])) / 2
 
