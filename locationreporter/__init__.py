@@ -47,13 +47,14 @@ def get_gps_location():
     """
     from socket import error as socketerror
 
+    gpsd_tries = 1
     gpsd_tries_max = 10
     acc = None
     tst = None
     alt = None
     cog = None
     vel = None
-    sat = None
+    sat = 0
 
     from gps3 import gps3
     gpsd_socket = gps3.GPSDSocket()
@@ -63,7 +64,6 @@ def get_gps_location():
         gpsd_socket.connect()
         gpsd_socket.watch()
 
-        gpsd_tries = 1
         for new_data in gpsd_socket:
             if new_data:
                 data_stream.unpack(new_data)
@@ -74,22 +74,30 @@ def get_gps_location():
                     if gpsd_tries_max <= gpsd_tries:
                         if cfg.verbose:
                             print('No valid gps data!')
-                        return acc, latlong, tst, alt, vel, cog
+                        return acc, latlong, tst, alt, vel, cog, sat
                 else:
                     tst = time.mktime(time.strptime(data_stream.TPV['time'], '%Y-%m-%dT%H:%M:%S.000Z'))
                     if 'n/a' != data_stream.TPV['epx']:
                         acc = (int(data_stream.TPV['epx'] + data_stream.TPV['epy'])) / 2
 
-                    alt = round(data_stream.TPV['alt'], 0)
-                    cog = round(data_stream.TPV['track'], 0)
-                    vel = round(data_stream.TPV['speed'], 0)
-                    sat = data_stream.SKY['satellites']
+                    try:
+                        latlong = (data_stream.TPV['lat'], data_stream.TPV['lon'])
+                        alt = round(data_stream.TPV['alt'], 0)
+                        cog = round(data_stream.TPV['track'], 0)
+                        vel = round(data_stream.TPV['speed'], 0)
+
+                        if data_stream.SKY['satellites'] not in ['n/a', 'n']:
+                            #  [{u'ss': 27, u'el': 0, u'PRN': 4, u'az': 0, u'used': False},
+                            for satelitte in data_stream.SKY['satellites']:
+                                if satelitte['used']:
+                                    sat += 1
+                    except TypeError, err:
+                        print("Error: %s" % err)
+                        pass
 
                     if cfg.verbose:
-                        print(acc, data_stream.TPV['lat'], data_stream.TPV['lon'])  # ie. 25, (50.1234567,-1.234567)
+                        print(acc, latlong[0], latlong[1])  # ie. 25, (50.1234567,-1.234567)
                     break
-            else:  # Drop out if no new data
-                break
 
     except socketerror, err:
         print("Error: Unable to connect to gpsd. Is it installed and enabled? (%s)" % err)
@@ -142,10 +150,16 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '%USERNAME', service['username'])
             if alt:
                 url = string.replace(url, '%ALT', str(alt))
+            else:
+                url = string.replace(url, '&alt=%ALT', '')
             if bat:
-                url = string.replace(url, '%BAT', str(bat))
+                url = string.replace(url, '%BATT', str(bat))
+            else:
+                url = string.replace(url, '&bat=%BATT', '')
             if sat:
                 url = string.replace(url, '%SAT', str(sat))
+            else:
+                url = string.replace(url, '&sat=%SAT', '')
 
         elif 'gpslogger' == service['name']:
             # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT
@@ -169,6 +183,8 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '&battery=%BATT', '')
             if sat:
                 url = string.replace(url, '%SAT', str(sat))
+            else:
+                url = string.replace(url, '&sat=%SAT', '')
             if vel:
                 url = string.replace(url, '%SPD', str(vel))
             else:
@@ -179,6 +195,7 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '&direction=%DIR', '')
             if 0 < len(service['password']):
                 url = url + "&api_password=" + service['password']
+            url = string.replace(url, '&activity=%ACT', '')
 
         else:
             print("Unknown reporting service %s. Supported are: phonetrack and gpslogger." % service['name'])
