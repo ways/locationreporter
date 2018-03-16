@@ -114,6 +114,7 @@ def get_gps_location():
                         print(acc, latlong[0], latlong[1])  # ie. 25, (50.1234567,-1.234567)
                     break
 
+            time.sleep(0.1)  # Don't grind CPU when gpsd doesn't work
     except socketerror, err:
         print("Error: Unable to connect to gpsd. Is it installed and enabled? (%s)" % err)
     except KeyboardInterrupt:
@@ -177,6 +178,8 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '&bat=%BATT', '')
             if sat:
                 url = string.replace(url, '%SAT', str(sat))
+            elif 'wifi' == prov:
+                url = string.replace(url, '%SAT', '0')
             else:
                 url = string.replace(url, '&sat=%SAT', '')
 
