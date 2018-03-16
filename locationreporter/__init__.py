@@ -9,7 +9,7 @@ import time
 import signal
 
 __projectname__ = 'locationreporter'
-__version__ = '0.2'
+__version__ = '0.3'
 __author__ = 'Lars Falk-Petersen'
 __copyright__ = 'Copyright 2018'
 __license__ = 'GPL'
@@ -28,15 +28,24 @@ def read_config():
             print("* %s" % entry['name'])
 
 
-# TODO:
 def report_fail(url, timeout=10):
     from requests import get
+
     if cfg.verbose:
-        print("No location")
-    response = get(url)
+        print("Reporting fail to %s" % url)
+
+    try:
+        with Timeout(cfg.timeout_location):
+            response = get(url)
+    except Timeout.Timeout:
+        if cfg.verbose:
+            print("Operation get_gps_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
+        return None
+
     if cfg.verbose:
         print(response)
-    sys.exit(1)
+
+    return response.status_code
 
 
 def get_gps_location():
@@ -144,6 +153,10 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
         if 'phonetrack' == service['name']:
             #  "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT",
 
+            if not acc or acc is None or acc > cfg.required_accuracy:
+                report_fail(service['failurl'])
+                return False
+
             url = string.replace(service['url'], '%LAT', str(pos[0]))
             url = string.replace(url, '%LON', str(pos[1]))
             url = string.replace(url, '%ACC', str(acc))
@@ -170,6 +183,11 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
         elif 'gpslogger' == service['name']:
             # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT
             #   &speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
+
+            if not acc or acc is None or acc > cfg.required_accuracy:
+                report_fail(service['failurl'])
+                return False
+
             url = string.replace(service['url'], '%LAT', str(pos[0]))
             url = string.replace(url, '%LON', str(pos[1]))
             url = string.replace(url, '%ACC', str(acc))
@@ -210,11 +228,18 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
         if cfg.verbose:
             print(" %s" % response)
 
+        return True
+
 
 def check_user():
     import os
     if os.geteuid() != 0:
         print("You usually need root privileges for wifi triangulation, please use 'sudo'.")
+
+
+def hostname():
+    from socket import gethostname
+    return gethostname()
 
 
 class Timeout:
@@ -247,10 +272,9 @@ if __name__ == '__main__':
     satelittes = None
     provider = 'wifi'
 
-    from socket import gethostname
-    hostname = gethostname()
-
+    hostname = hostname()
     print("%s v. %s on %s" % (__projectname__, __version__, hostname))
+
     read_config()
 
     if not cfg.use_wifi and not cfg.use_gps:
@@ -265,11 +289,10 @@ if __name__ == '__main__':
             with Timeout(cfg.timeout_location):
                 accuracy, latlong, timestamp = get_wifi_location(cfg.wifi_device)
         except Timeout.Timeout:
-            print("Operation timed out due to user set limit.")
+            print("Operation get_wifi_location timed out due to user set limit.")
 
-    if accuracy:
-        report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course,
-                        prov=provider, sat=satelittes)
+    report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course,
+                    prov=provider, sat=satelittes)
 
     while True:
         try:
@@ -291,8 +314,7 @@ if __name__ == '__main__':
                 except Timeout.Timeout:
                     print("Operation get_wifi_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
-            if accuracy:
-                report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider, sat=satelittes)
+            report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider, sat=satelittes)
 
             if cfg.verbose:
                 print("Next run in %s seconds..." % cfg.delay_seconds)

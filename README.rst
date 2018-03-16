@@ -31,11 +31,9 @@ Supports logging to the following via GET:
 
 ## TODO
 
-* Systemd .service file
 * Add timing info to see what takes long time
 * Deploy to PIP
 * Buffer failed reports?
-* Report fail
 * Read battery?
   $ cat /sys/class/power_supply/BAT0/uevent
   POWER_SUPPLY_NAME=BAT0
