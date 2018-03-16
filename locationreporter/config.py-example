@@ -7,6 +7,7 @@ use_wifi = True
 timeout_location = 30
 timeout_report = 10
 wifi_device = 'wlan0'
+required_accuracy = 500
 
 # List of dictionaries, each dict is a receiver
 receivers = dict()
@@ -16,7 +17,7 @@ receivers = [
         'url': "https://example.com/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT",
         'username': 'testing',  # Often hostname
         'password': 'secret',
-        'failurl': ''  # Will be posted to if location fails, just to get a heartbeat
+        'failurl': "https://example.com/fail"  # Will be posted to if location fails, just to get a heartbeat
     }
 ]
 
