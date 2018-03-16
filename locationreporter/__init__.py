@@ -50,6 +50,7 @@ def get_gps_location():
 
     gpsd_tries = 1
     gpsd_tries_max = 10
+    latlong = (None, None)
     acc = None
     tst = None
     alt = None
@@ -169,7 +170,6 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
         elif 'gpslogger' == service['name']:
             # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT
             #   &speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
-            # Never setting activity
             url = string.replace(service['url'], '%LAT', str(pos[0]))
             url = string.replace(url, '%LON', str(pos[1]))
             url = string.replace(url, '%ACC', str(acc))
@@ -177,7 +177,7 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
             if 0 == len(service['username']):
                 url = string.replace(url, '%SER', hostname)
             else:
-                url = string.replace(url, '%USERNAME', service['username'])
+                url = string.replace(url, '%SER', service['username'])
             if alt:
                 url = string.replace(url, '%ALT', str(alt))
             else:
@@ -186,10 +186,6 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '%BAT', str(bat))
             else:
                 url = string.replace(url, '&battery=%BATT', '')
-            if sat:
-                url = string.replace(url, '%SAT', str(sat))
-            else:
-                url = string.replace(url, '&sat=%SAT', '')
             if vel:
                 url = string.replace(url, '%SPD', str(vel))
             else:
@@ -200,7 +196,9 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '&direction=%DIR', '')
             if 0 < len(service['password']):
                 url = url + "&api_password=" + service['password']
-            url = string.replace(url, '&activity=%ACT', '')
+
+            # Never setting activity
+            url = string.replace(url, '%ACT', '')
 
         else:
             print("Unknown reporting service %s. Supported are: phonetrack and gpslogger." % service['name'])
