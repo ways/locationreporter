@@ -9,7 +9,7 @@ import time
 import signal
 
 __projectname__ = 'locationreporter'
-__version__ = '0.3'
+__version__ = '0.3.1'
 __author__ = 'Lars Falk-Petersen'
 __copyright__ = 'Copyright 2018'
 __license__ = 'GPL'
@@ -231,7 +231,7 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
         if cfg.verbose:
             print(" %s" % response)
 
-        return True
+    return True
 
 
 def check_user():
@@ -326,6 +326,7 @@ if __name__ == '__main__':
                 failures += 1
 
             if 0 < failures: #  Skip any delay if we've had failures
+                time.sleep(1)
                 continue
 
             if cfg.verbose:
