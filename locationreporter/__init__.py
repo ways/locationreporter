@@ -274,6 +274,7 @@ if __name__ == '__main__':
     latlong = (None, None)
     satelittes = None
     provider = 'wifi'
+    failures = 0
 
     hostname = hostname()
     print("%s v. %s on %s" % (__projectname__, __version__, hostname))
@@ -298,6 +299,8 @@ if __name__ == '__main__':
                     prov=provider, sat=satelittes)
 
     while True:
+        failures = 0
+
         try:
             accuracy = False
 
@@ -310,6 +313,8 @@ if __name__ == '__main__':
                     print("Operation get_gps_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
             if not accuracy and cfg.use_wifi:
+                failures += 1
+
                 try:
                     with Timeout(cfg.timeout_location):
                         accuracy, latlong, timestamp = get_wifi_location(cfg.wifi_device)
@@ -317,7 +322,11 @@ if __name__ == '__main__':
                 except Timeout.Timeout:
                     print("Operation get_wifi_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
-            report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider, sat=satelittes)
+            if not report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider, sat=satelittes):
+                failures += 1
+
+            if 0 < failures: #  Skip any delay if we've had failures
+                continue
 
             if cfg.verbose:
                 print("Next run in %s seconds..." % cfg.delay_seconds)
