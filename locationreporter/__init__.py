@@ -18,6 +18,19 @@ __url__ = 'https://github.com/ways/locationreporter'
 cfg = None
 
 
+'''
+I don't use a battery, so will return cpu temp instead.
+This is very optional, so we don't depend on the module. Install it if you want this.
+'''
+def get_battery():
+    try:
+        from gpiozero import CPUTemperature
+        cpu = CPUTemperature()
+        return int(cpu.temperature)
+    except ImportError:
+        pass
+
+
 def read_config():
     """ Read config from config.py and put in cfg """
     global cfg
@@ -39,7 +52,8 @@ def report_fail(url, timeout=10):
             response = get(url)
     except Timeout.Timeout:
         if cfg.verbose:
-            print("Operation get_gps_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
+            print("Operation get_gps_location timed out due to user set limit (%s seconds)."
+                % cfg.timeout_location)
         return None
 
     if cfg.verbose:
@@ -143,7 +157,7 @@ def get_wifi_location(device=''):
 
 
 def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, 
-        cog=None, sat=None, bat=None, prov=None):
+        cog=None, sat=None, bat=get_battery(), prov=None):
     from requests import get
     import string
 
@@ -155,7 +169,9 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None,
 
         # Merge data in URL
         if 'phonetrack' == service['name']:
-            #  "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&speed=%SPD&bearing=%DIR&timestamp=%TIMESTAMP&bat=%BATT
+            #  "https://users.no/index.php/apps/phonetrack/log/gpslogger/
+            # %PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC
+            # &speed=%SPD&bearing=%DIR&timestamp=%TIMESTAMP&bat=%BATT
 
             if not acc or acc is None or acc > cfg.required_accuracy:
                 report_fail(service['failurl'])
@@ -195,8 +211,9 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None,
                 url = string.replace(url, '&bearing=%DIR', '')
 
         elif 'gpslogger' == service['name']:
-            # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT
-            #   &speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
+            # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON
+            # &device=%SER&accuracy=%ACC&battery=%BATT
+            # &speed=%SPD&direction=%DIR&altitude=%ALT&provider=%PROV&activity=%ACT
 
             if not acc or acc is None or acc > cfg.required_accuracy:
                 report_fail(service['failurl'])
@@ -215,7 +232,7 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None,
             else:
                 url = string.replace(url, '&altitude=%ALT', '')
             if bat:
-                url = string.replace(url, '%BAT', str(bat))
+                url = string.replace(url, '%BATT', str(bat))
             else:
                 url = string.replace(url, '&battery=%BATT', '')
             if vel:
@@ -233,7 +250,8 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None,
             url = string.replace(url, '%ACT', '')
 
         else:
-            print("Unknown reporting service %s. Supported are: phonetrack and gpslogger." % service['name'])
+            print("Unknown reporting service %s. Supported are: phonetrack and gpslogger."
+                % service['name'])
             sys.exit(1)
 
         if cfg.verbose:
@@ -306,8 +324,8 @@ if __name__ == '__main__':
         except Timeout.Timeout:
             print("Operation get_wifi_location timed out due to user set limit.")
 
-    report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course,
-                    prov=provider, sat=satelittes)
+    report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude,
+                    vel=velocity, cog=course, prov=provider, sat=satelittes)
 
     while True:
         failures = 0
@@ -318,10 +336,12 @@ if __name__ == '__main__':
             if cfg.use_gps:
                 try:
                     with Timeout(cfg.timeout_location):
-                        accuracy, latlong, timestamp, altitude, velocity, course, satelittes = get_gps_location()
+                        accuracy, latlong, timestamp, altitude, velocity, \
+                        course, satelittes = get_gps_location()
                         provider = 'gps'
                 except Timeout.Timeout:
-                    print("Operation get_gps_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
+                    print("Operation get_gps_location timed out due to user set limit (%s seconds)."
+                    % cfg.timeout_location)
 
             if not accuracy and cfg.use_wifi:
                 failures += 1
@@ -333,7 +353,8 @@ if __name__ == '__main__':
                 except Timeout.Timeout:
                     print("Operation get_wifi_location timed out due to user set limit (%s seconds)." % cfg.timeout_location)
 
-            if not report_location(acc=accuracy, pos=latlong, tst=timestamp, alt=altitude, vel=velocity, cog=course, prov=provider, sat=satelittes):
+            if not report_location(acc=accuracy, pos=latlong, tst=timestamp, 
+                alt=altitude, vel=velocity, cog=course, prov=provider, sat=satelittes):
                 failures += 1
 
             if 0 < failures: #  Skip any delay if we've had failures
