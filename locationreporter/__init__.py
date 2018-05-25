@@ -9,7 +9,7 @@ import time
 import signal
 
 __projectname__ = 'locationreporter'
-__version__ = '0.3.1'
+__version__ = '0.4'
 __author__ = 'Lars Falk-Petersen'
 __copyright__ = 'Copyright 2018'
 __license__ = 'GPL'
@@ -78,7 +78,8 @@ def get_gps_location():
         for new_data in gpsd_socket:
             if new_data:
                 data_stream.unpack(new_data)
-                print('Reading gps data (%s/%s), epx %s' % (gpsd_tries, gpsd_tries_max, data_stream.TPV['epx']))
+                print('Reading gps data (%s/%s), epx %s' 
+                    % (gpsd_tries, gpsd_tries_max, data_stream.TPV['epx']))
 
                 if 'n/a' == data_stream.TPV['lat']:  # No data
                     gpsd_tries += 1
@@ -88,7 +89,8 @@ def get_gps_location():
                         return acc, latlong, tst, alt, vel, cog, sat
                 else:
                     # TODO: optimize?
-                    gpstime = time.mktime(time.strptime(data_stream.TPV['time'], '%Y-%m-%dT%H:%M:%S.000Z'))
+                    gpstime = time.mktime(time.strptime(data_stream.TPV['time'],
+                        '%Y-%m-%dT%H:%M:%S.000Z'))
                     offset = datetime.fromtimestamp(gpstime) - datetime.utcfromtimestamp(gpstime)
                     tst = gpstime + offset.seconds
 
@@ -140,7 +142,8 @@ def get_wifi_location(device=''):
     return round(acc, 0), latlng, tst
 
 
-def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, cog=None, sat=None, bat=None, prov=None):
+def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, 
+        cog=None, sat=None, bat=None, prov=None):
     from requests import get
     import string
 
@@ -152,7 +155,7 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
 
         # Merge data in URL
         if 'phonetrack' == service['name']:
-            #  "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&timestamp=%TIMESTAMP&bat=%BATT",
+            #  "https://users.no/index.php/apps/phonetrack/log/gpslogger/%PASSWORD/%USERNAME?lat=%LAT&lon=%LON&sat=%SAT&alt=%ALT&acc=%ACC&speed=%SPD&bearing=%DIR&timestamp=%TIMESTAMP&bat=%BATT
 
             if not acc or acc is None or acc > cfg.required_accuracy:
                 report_fail(service['failurl'])
@@ -182,6 +185,14 @@ def report_location(acc=None, pos=(None, None), tst=None, alt=None, vel=None, co
                 url = string.replace(url, '%SAT', '0')
             else:
                 url = string.replace(url, '&sat=%SAT', '')
+            if vel:
+                url = string.replace(url, '%SPD', str(vel))
+            else:
+                url = string.replace(url, '&speed=%SPD', '')
+            if cog:
+                url = string.replace(url, '%DIR', str(cog))
+            else:
+                url = string.replace(url, '&bearing=%DIR', '')
 
         elif 'gpslogger' == service['name']:
             # https://h.users.no/api/gpslogger?latitude=%LAT&longitude=%LON&device=%SER&accuracy=%ACC&battery=%BATT
